@@ -49,6 +49,29 @@ try {
     const body = await response.json();
     await stat(join(root, body.reviewPath));
     await stat(join(root, body.markdownPath));
+    await stat(join(root, body.statusPath));
+
+    const statusResponse = await fetch(`http://127.0.0.1:${address.port}${body.statusUrl}`);
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json();
+    assert.equal(status.status, "waiting_for_agent");
+
+    const updateResponse = await fetch(`http://127.0.0.1:${address.port}${body.statusUrl}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        status: "completed",
+        phase: "verify",
+        percent: 100,
+        message: "Applied and verified.",
+        terminal: true,
+        step: { key: "verify", status: "done" }
+      })
+    });
+    assert.equal(updateResponse.status, 200);
+    const updated = await updateResponse.json();
+    assert.equal(updated.status, "completed");
+    assert.equal(updated.terminal, true);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
@@ -57,4 +80,3 @@ try {
 } finally {
   await rm(root, { recursive: true, force: true });
 }
-

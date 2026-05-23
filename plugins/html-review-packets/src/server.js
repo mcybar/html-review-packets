@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { packetSlug, packetToMarkdown, timestampForFile, validatePacket } from "./packet.js";
@@ -20,6 +20,16 @@ export async function serveBridge({ root = process.cwd(), port = 8783, host = "1
       const url = new URL(request.url || "/", `http://${request.headers.host || `${host}:${port}`}`);
       if (request.method === "POST" && url.pathname === "/api/review-packet") {
         await handlePacket(request, response, safeRoot);
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/review-status") {
+        await handleStatusRead(url, response, safeRoot);
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/review-status") {
+        await handleStatusUpdate(request, url, response, safeRoot);
         return;
       }
 
@@ -53,18 +63,149 @@ async function handlePacket(request, response, root) {
   const packet = validatePacket(JSON.parse(raw));
   const stamp = timestampForFile();
   const slug = packetSlug(packet);
+  const reviewId = `${stamp}-${slug}`;
   const outDir = join(root, ".html-review-packets", "packets");
+  const statusDir = join(root, ".html-review-packets", "status");
   await mkdir(outDir, { recursive: true });
-  const jsonPath = join(outDir, `${stamp}-${slug}.json`);
-  const markdownPath = join(outDir, `${stamp}-${slug}.md`);
-  await writeFile(jsonPath, JSON.stringify(packet, null, 2) + "\n", "utf8");
-  await writeFile(markdownPath, packetToMarkdown(packet) + "\n", "utf8");
-  sendJson(response, 200, {
-    ok: true,
+  await mkdir(statusDir, { recursive: true });
+  const jsonPath = join(outDir, `${reviewId}.json`);
+  const markdownPath = join(outDir, `${reviewId}.md`);
+  const statusPath = join(statusDir, `${reviewId}.json`);
+  const now = new Date().toISOString();
+  const status = initialProgressStatus({
+    id: reviewId,
+    now,
     reviewPath: relative(root, jsonPath),
     markdownPath: relative(root, markdownPath),
+    statusPath: relative(root, statusPath)
+  });
+  await writeFile(jsonPath, JSON.stringify(packet, null, 2) + "\n", "utf8");
+  await writeFile(markdownPath, packetToMarkdown(packet, {
+    reviewId,
+    statusPath: relative(root, statusPath),
+    statusUrl: `/api/review-status?id=${encodeURIComponent(reviewId)}`
+  }) + "\n", "utf8");
+  await writeFile(statusPath, JSON.stringify(status, null, 2) + "\n", "utf8");
+  sendJson(response, 200, {
+    ok: true,
+    reviewId,
+    reviewPath: status.reviewPath,
+    markdownPath: status.markdownPath,
+    statusPath: status.statusPath,
+    statusUrl: `/api/review-status?id=${encodeURIComponent(reviewId)}`,
+    progress: status,
     agentStarted: false
   });
+}
+
+async function handleStatusRead(url, response, root) {
+  const id = safeStatusId(url.searchParams.get("id"));
+  if (!id) {
+    sendJson(response, 400, { ok: false, error: "Missing status id." });
+    return;
+  }
+  const statusPath = join(root, ".html-review-packets", "status", `${id}.json`);
+  assertInsideRoot(statusPath, root);
+  try {
+    const status = JSON.parse(await readFile(statusPath, "utf8"));
+    sendJson(response, 200, status);
+  } catch (_error) {
+    sendJson(response, 404, { ok: false, id, status: "unknown", message: "No progress status found for this review packet." });
+  }
+}
+
+async function handleStatusUpdate(request, url, response, root) {
+  const id = safeStatusId(url.searchParams.get("id"));
+  if (!id) {
+    sendJson(response, 400, { ok: false, error: "Missing status id." });
+    return;
+  }
+  const statusPath = join(root, ".html-review-packets", "status", `${id}.json`);
+  assertInsideRoot(statusPath, root);
+  const patch = JSON.parse(await readRequestBody(request, MAX_PACKET_BYTES));
+  const existing = JSON.parse(await readFile(statusPath, "utf8"));
+  const updated = mergeProgressStatus(existing, patch);
+  await writeFile(statusPath, JSON.stringify(updated, null, 2) + "\n", "utf8");
+  sendJson(response, 200, updated);
+}
+
+function initialProgressStatus({ id, now, reviewPath, markdownPath, statusPath }) {
+  return {
+    schema: "html_review_progress.v1",
+    id,
+    status: "waiting_for_agent",
+    phase: "submitted",
+    percent: 20,
+    message: "Review packet saved. Waiting for an agent to apply it.",
+    createdAt: now,
+    updatedAt: now,
+    reviewPath,
+    markdownPath,
+    statusPath,
+    terminal: false,
+    steps: [
+      { key: "submitted", label: "Packet submitted", status: "done", at: now },
+      { key: "checkpoint", label: "Create version checkpoint", status: "pending" },
+      { key: "apply", label: "Apply requested amendments", status: "pending" },
+      { key: "regenerate", label: "Regenerate HTML", status: "pending" },
+      { key: "verify", label: "Verify and summarize", status: "pending" }
+    ],
+    events: [
+      { at: now, status: "waiting_for_agent", message: "Review packet saved by bridge." }
+    ]
+  };
+}
+
+function mergeProgressStatus(existing, patch) {
+  const now = new Date().toISOString();
+  const next = {
+    ...existing,
+    ...pickProgressFields(patch),
+    updatedAt: now
+  };
+  if (patch.step) next.steps = updateStep(next.steps || [], patch.step, now);
+  if (patch.steps && Array.isArray(patch.steps)) next.steps = patch.steps;
+  next.terminal = Boolean(patch.terminal ?? isTerminalStatus(next.status));
+  next.events = Array.isArray(existing.events) ? existing.events.slice(-50) : [];
+  next.events.push({
+    at: now,
+    status: next.status,
+    phase: next.phase,
+    message: next.message || ""
+  });
+  return next;
+}
+
+function pickProgressFields(patch) {
+  const allowed = {};
+  for (const key of ["status", "phase", "percent", "message", "reviewPath", "markdownPath", "statusPath", "summaryPath", "error"]) {
+    if (patch[key] !== undefined) allowed[key] = patch[key];
+  }
+  return allowed;
+}
+
+function updateStep(steps, step, now) {
+  const key = step.key || step;
+  const index = steps.findIndex((item) => item.key === key);
+  const nextStep = typeof step === "string" ? { key, status: "done" } : step;
+  const normalized = {
+    ...nextStep,
+    key,
+    label: nextStep.label || steps[index]?.label || key,
+    status: nextStep.status || "done"
+  };
+  if (["done", "failed", "running"].includes(normalized.status)) normalized.at = normalized.at || now;
+  if (index >= 0) return steps.map((item, itemIndex) => itemIndex === index ? { ...item, ...normalized } : item);
+  return [...steps, normalized];
+}
+
+function isTerminalStatus(status) {
+  return ["completed", "failed", "cancelled", "needs_manual_apply"].includes(status);
+}
+
+function safeStatusId(id) {
+  const value = String(id || "");
+  return /^[a-zA-Z0-9._-]{1,160}$/.test(value) ? value : "";
 }
 
 async function serveStatic(pathname, response, root) {

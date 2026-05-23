@@ -25,11 +25,34 @@ test("bridge writes packet json and markdown", async () => {
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.ok, true);
+    assert.equal(body.progress.status, "waiting_for_agent");
     await stat(join(root, body.reviewPath));
+    await stat(join(root, body.statusPath));
     const markdown = await readFile(join(root, body.markdownPath), "utf8");
     assert.match(markdown, /Tighten this/);
+    assert.match(markdown, /Progress status endpoint/);
+
+    const statusResponse = await fetch(`http://127.0.0.1:${address.port}${body.statusUrl}`);
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json();
+    assert.equal(status.id, body.reviewId);
+
+    const updateResponse = await fetch(`http://127.0.0.1:${address.port}${body.statusUrl}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        status: "agent_running",
+        phase: "apply",
+        percent: 55,
+        message: "Applying edits.",
+        step: { key: "apply", status: "running" }
+      })
+    });
+    assert.equal(updateResponse.status, 200);
+    const updated = await updateResponse.json();
+    assert.equal(updated.status, "agent_running");
+    assert.equal(updated.steps.find((step) => step.key === "apply").status, "running");
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
 });
-

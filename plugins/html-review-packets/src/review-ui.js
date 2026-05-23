@@ -3,7 +3,7 @@ export function renderReviewUi() {
 }
 
 function reviewUiRuntime() {
-  const VERSION = "0.1.0";
+  const VERSION = "0.2.0";
   const DEFAULT_SELECTOR = [
     "[data-review-section]",
     "article",
@@ -27,6 +27,7 @@ function reviewUiRuntime() {
   const config = readConfig();
   const selector = config.sectionSelector || DEFAULT_SELECTOR;
   const storageKey = config.storageKey || ("html-review-packets:" + location.href);
+  const progressKey = storageKey + ":progress";
   const state = {
     range: null,
     target: null,
@@ -34,7 +35,9 @@ function reviewUiRuntime() {
     sectionPath: "",
     anchorX: 24,
     anchorY: 24,
-    comments: loadComments()
+    comments: loadComments(),
+    progress: loadProgress(),
+    progressTimer: null
   };
 
   const menu = document.createElement("div");
@@ -86,6 +89,18 @@ function reviewUiRuntime() {
     '  <button type="button" class="hrp-button" data-hrp-action="download-packet">Download JSON</button>',
     '  <button type="button" class="hrp-button" data-hrp-action="clear-comments">Clear</button>',
     "</div>",
+    '<div class="hrp-progress" data-hrp-progress hidden>',
+    '  <div class="hrp-progress-head">',
+    '    <div>',
+    '      <strong class="hrp-progress-title">Agent progress</strong>',
+    '      <p class="hrp-progress-message"></p>',
+    "    </div>",
+    '    <button type="button" class="hrp-button" data-hrp-action="refresh-progress">Refresh</button>',
+    "  </div>",
+    '  <div class="hrp-progress-bar"><span></span></div>',
+    '  <div class="hrp-progress-meta"></div>',
+    '  <div class="hrp-progress-steps"></div>',
+    "</div>",
     '<div class="hrp-list"></div>'
   ].join("");
 
@@ -99,20 +114,30 @@ function reviewUiRuntime() {
   const commentInput = bubble.querySelector(".hrp-input");
   const replacementInput = bubble.querySelector(".hrp-replacement");
   const listEl = panel.querySelector(".hrp-list");
+  const progressEl = panel.querySelector("[data-hrp-progress]");
 
   restoreCommentMarks();
   renderComments();
+  renderProgress();
   updateCount();
+  if (state.progress && !state.progress.terminal) startProgressPolling();
 
   window.HTMLReviewPackets = {
     version: VERSION,
     getPacket: buildPacket,
+    getProgress() {
+      return state.progress;
+    },
     clearComments,
     addCommentForTest(input) {
       const item = normalizeComment(input || {});
       state.comments.push(item);
       saveComments();
       return item;
+    },
+    setProgressForTest(progress) {
+      setProgress(progress || null);
+      return state.progress;
     }
   };
 
@@ -166,6 +191,7 @@ function reviewUiRuntime() {
       if (action === "copy-packet") copyPacket();
       if (action === "download-packet") downloadPacket();
       if (action === "submit-packet") submitPacket();
+      if (action === "refresh-progress") pollProgress(true);
       if (action === "clear-comments") clearComments();
       closeMenu();
       return;
@@ -344,6 +370,15 @@ function reviewUiRuntime() {
     updateCount();
   }
 
+  function loadProgress() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(progressKey) || "null");
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
   function newCommentId() {
     return "hrp-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
   }
@@ -442,6 +477,87 @@ function reviewUiRuntime() {
     ].join("")).join("");
   }
 
+  function setProgress(progress) {
+    state.progress = progress ? normalizeProgress(progress) : null;
+    if (state.progress) localStorage.setItem(progressKey, JSON.stringify(state.progress, null, 2));
+    else localStorage.removeItem(progressKey);
+    renderProgress();
+  }
+
+  function normalizeProgress(progress) {
+    const now = new Date().toISOString();
+    const incoming = progress || {};
+    const carryPrevious = Boolean(state.progress)
+      && !incoming.id
+      && incoming.status !== "submitting"
+      && incoming.status !== "needs_manual_apply"
+      && incoming.statusUrl !== "";
+    const next = Object.assign({
+      schema: "html_review_progress.v1",
+      id: "",
+      statusUrl: "",
+      status: "unknown",
+      phase: "",
+      percent: 0,
+      message: "",
+      updatedAt: now,
+      terminal: false,
+      steps: []
+    }, carryPrevious ? state.progress : {}, incoming);
+    next.percent = Math.max(0, Math.min(100, Number(next.percent || 0)));
+    next.terminal = Boolean(next.terminal || isTerminalStatus(next.status));
+    if (!Array.isArray(next.steps)) next.steps = [];
+    return next;
+  }
+
+  function renderProgress() {
+    if (!progressEl) return;
+    const progress = state.progress;
+    if (!progress) {
+      progressEl.hidden = true;
+      return;
+    }
+    progressEl.hidden = false;
+    progressEl.dataset.status = progress.status || "unknown";
+    const title = progressEl.querySelector(".hrp-progress-title");
+    const message = progressEl.querySelector(".hrp-progress-message");
+    const bar = progressEl.querySelector(".hrp-progress-bar span");
+    const meta = progressEl.querySelector(".hrp-progress-meta");
+    const steps = progressEl.querySelector(".hrp-progress-steps");
+    if (title) title.textContent = progressTitle(progress);
+    if (message) message.textContent = progress.message || "";
+    if (bar) bar.style.width = (progress.percent || 0) + "%";
+    if (meta) {
+      const parts = [];
+      if (progress.id) parts.push("ID " + progress.id);
+      if (progress.phase) parts.push(progress.phase);
+      if (progress.updatedAt) parts.push("updated " + new Date(progress.updatedAt).toLocaleTimeString());
+      meta.textContent = parts.join(" · ");
+    }
+    if (steps) {
+      steps.innerHTML = (progress.steps || []).map((step) => [
+        '<div class="hrp-step" data-step-status="' + attr(step.status || "pending") + '">',
+        '  <span class="hrp-step-dot"></span>',
+        '  <span class="hrp-step-label">' + escapeHtml(step.label || step.key || "Step") + '</span>',
+        '  <span class="hrp-step-state">' + escapeHtml(step.status || "pending") + '</span>',
+        '</div>'
+      ].join("")).join("");
+    }
+  }
+
+  function progressTitle(progress) {
+    const labels = {
+      submitting: "Submitting packet",
+      waiting_for_agent: "Waiting for agent",
+      agent_queued: "Agent queued",
+      agent_running: "Agent working",
+      completed: "Review applied",
+      failed: "Review failed",
+      needs_manual_apply: "Manual apply needed"
+    };
+    return labels[progress.status] || "Agent progress";
+  }
+
   function updateCount() {
     const count = fab.querySelector(".hrp-count");
     if (count) count.textContent = String(state.comments.length);
@@ -468,6 +584,7 @@ function reviewUiRuntime() {
 
   function togglePanel() {
     renderComments();
+    renderProgress();
     panel.classList.toggle("is-open");
   }
 
@@ -539,11 +656,54 @@ function reviewUiRuntime() {
       showToast("Save at least one comment first.");
       return;
     }
+    setProgress({
+      id: "",
+      statusUrl: "",
+      status: "submitting",
+      phase: "submit",
+      percent: 8,
+      message: "Submitting review packet to the local bridge.",
+      terminal: false,
+      updatedAt: new Date().toISOString(),
+      steps: [
+        { key: "submitted", label: "Packet submitted", status: "running" },
+        { key: "checkpoint", label: "Create version checkpoint", status: "pending" },
+        { key: "apply", label: "Apply requested amendments", status: "pending" },
+        { key: "regenerate", label: "Regenerate HTML", status: "pending" },
+        { key: "verify", label: "Verify and summarize", status: "pending" }
+      ]
+    });
+    panel.classList.add("is-open");
     try {
       const result = await postPacket(packet);
+      const progress = normalizeProgress(result.progress || {
+        id: result.reviewId || "",
+        status: result.agentStarted ? "agent_queued" : "waiting_for_agent",
+        phase: "submitted",
+        percent: result.agentStarted ? 30 : 20,
+        message: result.agentStarted ? "Review packet saved. Agent queued." : "Review packet saved. Waiting for an agent to apply it.",
+        steps: result.progress?.steps || []
+      });
+      progress.statusUrl = statusUrlForResult(result);
+      setProgress(progress);
+      startProgressPolling();
       showToast("Review packet saved: " + (result.reviewPath || "packet JSON") + ".");
     } catch (_error) {
       const copied = await copyText(buildPrompt(), "Review packet");
+      setProgress({
+        id: "",
+        statusUrl: "",
+        status: "needs_manual_apply",
+        phase: "manual",
+        percent: copied ? 10 : 0,
+        message: copied ? "Bridge unavailable. Packet copied for manual agent apply." : "Bridge unavailable. Download the JSON packet and give it to the agent.",
+        terminal: true,
+        updatedAt: new Date().toISOString(),
+        steps: [
+          { key: "submitted", label: "Packet submitted", status: "failed" },
+          { key: "manual", label: "Manual handoff", status: copied ? "done" : "pending" }
+        ]
+      });
       if (copied) showToast("Bridge unavailable. Packet copied.");
       else downloadPacket();
     }
@@ -561,7 +721,9 @@ function reviewUiRuntime() {
           body
         });
         if (!response.ok) throw new Error("HTTP " + response.status);
-        return await response.json();
+        const data = await response.json();
+        data._endpoint = endpoint;
+        return data;
       } catch (error) {
         lastError = error;
       }
@@ -574,6 +736,45 @@ function reviewUiRuntime() {
     if (location.protocol !== "file:") endpoints.push(new URL("/api/review-packet", location.href).href);
     if (config.bridgeUrl) endpoints.push(config.bridgeUrl);
     return Array.from(new Set(endpoints));
+  }
+
+  function statusUrlForResult(result) {
+    if (!result || !result.statusUrl) return "";
+    try {
+      const base = result._endpoint ? new URL(result._endpoint).origin : location.href;
+      return new URL(result.statusUrl, base).href;
+    } catch (_error) {
+      return result.statusUrl || "";
+    }
+  }
+
+  function startProgressPolling() {
+    window.clearInterval(state.progressTimer);
+    if (!state.progress || !state.progress.statusUrl || state.progress.terminal) return;
+    state.progressTimer = window.setInterval(() => pollProgress(false), 2000);
+    pollProgress(false);
+  }
+
+  async function pollProgress(force) {
+    if (!state.progress || !state.progress.statusUrl) {
+      if (force) showToast("No progress endpoint for this packet.");
+      return;
+    }
+    try {
+      const response = await fetch(state.progress.statusUrl, { method: "GET", mode: "cors" });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const progress = await response.json();
+      progress.statusUrl = state.progress.statusUrl;
+      setProgress(progress);
+      if (state.progress.terminal) window.clearInterval(state.progressTimer);
+      if (force) showToast("Progress refreshed.");
+    } catch (_error) {
+      if (force) showToast("Could not refresh progress.");
+    }
+  }
+
+  function isTerminalStatus(status) {
+    return ["completed", "failed", "cancelled", "needs_manual_apply"].includes(status);
   }
 
   async function copyText(text, label) {
@@ -625,4 +826,3 @@ function reviewUiRuntime() {
     return String(value).replace(/["\\]/g, "\\$&");
   }
 }
-

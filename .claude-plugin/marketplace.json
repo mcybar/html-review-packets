@@ -9,7 +9,7 @@
     {
       "name": "html-review-packets",
       "description": "Inline review comments and review-packet capture for generated HTML artifacts.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": {
         "name": "Ming Wu"
       },
@@ -24,6 +24,5 @@
       ]
     }
   ],
-  "version": "0.1.0"
+  "version": "0.2.0"
 }
-

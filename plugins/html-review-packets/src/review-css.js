@@ -231,6 +231,115 @@ export function renderReviewCss() {
   gap: 8px;
 }
 
+.hrp-progress {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 10px;
+  border: 1px solid var(--hrp-line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfe;
+}
+
+.hrp-progress[hidden] {
+  display: none;
+}
+
+.hrp-progress-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.hrp-progress-title {
+  display: block;
+  font-size: 13px;
+}
+
+.hrp-progress-message {
+  margin: 3px 0 0;
+  color: var(--hrp-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.hrp-progress-bar {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8ebf0;
+}
+
+.hrp-progress-bar span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--hrp-accent);
+  transition: width 180ms ease;
+}
+
+.hrp-progress[data-status="completed"] .hrp-progress-bar span {
+  background: #108a4f;
+}
+
+.hrp-progress[data-status="failed"] .hrp-progress-bar span,
+.hrp-progress[data-status="needs_manual_apply"] .hrp-progress-bar span {
+  background: #c2410c;
+}
+
+.hrp-progress-meta {
+  color: var(--hrp-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.hrp-progress-steps {
+  display: grid;
+  gap: 5px;
+}
+
+.hrp-step {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: var(--hrp-muted);
+  font-size: 12px;
+}
+
+.hrp-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #c4cad4;
+}
+
+.hrp-step[data-step-status="running"] .hrp-step-dot {
+  background: var(--hrp-accent);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.hrp-step[data-step-status="done"] .hrp-step-dot {
+  background: #108a4f;
+}
+
+.hrp-step[data-step-status="failed"] .hrp-step-dot {
+  background: #c2410c;
+}
+
+.hrp-step-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hrp-step-state {
+  font-size: 11px;
+}
+
 .hrp-card {
   border: 1px solid var(--hrp-line);
   border-radius: 8px;
@@ -309,4 +418,3 @@ export function renderReviewCss() {
 }
 `;
 }
-

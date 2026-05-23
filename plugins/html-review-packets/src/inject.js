@@ -30,7 +30,7 @@ export function makeCommentableHtmlString(html, config = {}, options = {}) {
   if (hasInjection(html) && !options.force) return html;
   const clean = options.force ? removeExistingInjection(html) : html;
   const normalized = {
-    version: "0.1.0",
+    version: "0.2.0",
     documentFile: config.documentFile || "",
     generatorFile: config.generatorFile || "",
     title: config.title || "",
@@ -82,4 +82,3 @@ function storageKeyFor(input) {
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-

@@ -17,7 +17,7 @@ export function validatePacket(packet) {
   return packet;
 }
 
-export function packetToMarkdown(packet) {
+export function packetToMarkdown(packet, metadata = {}) {
   validatePacket(packet);
   const document = packet.document || {};
   const lines = [
@@ -29,10 +29,22 @@ export function packetToMarkdown(packet) {
     `Generator: ${document.generator || "not provided"}`,
     `URL: ${document.url || "not provided"}`,
     "",
+    ...(metadata.reviewId ? [`Review ID: ${metadata.reviewId}`] : []),
+    ...(metadata.statusPath ? [`Progress status file: ${metadata.statusPath}`] : []),
+    ...(metadata.statusUrl ? [`Progress status endpoint: ${metadata.statusUrl}`] : []),
+    ...(metadata.reviewId || metadata.statusPath || metadata.statusUrl ? [""] : []),
     "## Agent Task",
     "",
     "Review all comments together, checkpoint the source, amend only the relevant sections, regenerate the HTML if there is a generator, and report the diff.",
     "",
+    ...(metadata.statusPath || metadata.statusUrl ? [
+      "While working, update progress so the HTML reviewer can see status:",
+      "",
+      "- `status=agent_running`, `phase=checkpoint`, `step.key=checkpoint`, `step.status=running` when starting.",
+      "- Mark each step `done` as it completes.",
+      "- Finish with `status=completed`, `terminal=true`, and a concise final message.",
+      "",
+    ] : []),
     "## Comments"
   ];
 
@@ -78,4 +90,3 @@ export function timestampForFile(date = new Date()) {
 function fence(value) {
   return ["```", String(value || ""), "```"].join("\n");
 }
-

@@ -20,7 +20,7 @@ node bin/html-review-packets.js make tests/fixtures/basic.html --out /tmp/basic.
 node bin/html-review-packets.js serve --root /tmp --port 8783
 ```
 
-Open `http://127.0.0.1:8783/basic.review.html`, select text, right-click, add a comment, then press `Submit packet`.
+Open `http://127.0.0.1:8783/basic.review.html`, select text, right-click, add a comment, then press `Submit packet`. The review panel shows agent progress after submission and refreshes from the local bridge while the packet is being applied.
 
 ## Install
 
@@ -56,7 +56,8 @@ A successful install from scratch means a user can:
 3. Get back a new `.review.html` file with inline comment controls.
 4. Select text, right-click, type a comment, and press Enter to save it.
 5. Click `Submit packet` and produce a JSON packet under `.html-review-packets/packets/`.
-6. Give that packet back to the agent and have it checkpoint the original files, apply the requested amendment, and report what changed.
+6. See progress in the HTML as the agent checkpoints, applies edits, regenerates the HTML, and verifies the result.
+7. Give that packet back to the agent and have it checkpoint the original files, apply the requested amendment, and report what changed.
 
 Run the deterministic test task:
 
@@ -66,4 +67,3 @@ npm run verify
 ```
 
 That covers CLI injection, packet validation, bridge persistence, and a scratch install simulation for OpenClaw, Codex, and Claude Code layout.
-

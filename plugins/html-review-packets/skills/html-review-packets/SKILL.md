@@ -32,7 +32,7 @@ node <SKILL_DIR>/scripts/html-review-packets.mjs packet-markdown .html-review-pa
    ```
 4. Tell the user to open the `.review.html` through `http://127.0.0.1:8783/<file>` when the bridge is running. `file://` still works, but submit falls back to copy/download if the bridge is unavailable.
 
-The review UI supports: select text, right-click, add comment or suggested replacement, Enter to save, review queue, submit packet, copy packet, and JSON download.
+The review UI supports: select text, right-click, add comment or suggested replacement, Enter to save, review queue, submit packet, visible agent progress, copy packet, and JSON download.
 
 ## Apply A Review Packet
 
@@ -40,13 +40,27 @@ When the user provides an `html_review_packet.v1` JSON packet:
 
 1. Parse and inspect all comments together. Do not blindly apply one comment at a time if comments conflict.
 2. Find the source HTML and generator from `packet.document.file` and `packet.document.generator`.
-3. Checkpoint before editing:
+3. If the packet markdown or bridge response includes a progress endpoint, update it while working:
+   ```bash
+   curl -s -X POST "http://127.0.0.1:8783/api/review-status?id=<reviewId>" \
+     -H 'content-type: application/json' \
+     --data '{"status":"agent_running","phase":"checkpoint","percent":35,"message":"Creating version checkpoint.","step":{"key":"checkpoint","status":"running"}}'
+   ```
+   If there is only a status file, edit the JSON status file with the same fields.
+4. Checkpoint before editing:
    - If inside a git repo, inspect status and keep edits scoped.
    - If not in git, copy touched files into `.html-review-packets/versions/<timestamp>/`.
-4. Apply only the requested section amendments unless the packet clearly asks for broader cleanup.
-5. If a generator exists, edit the generator/source of truth and regenerate the HTML. Otherwise edit the HTML directly.
-6. Re-run `make` on the resulting HTML so the next review round keeps the comment UI.
-7. Report changed files and verification.
+5. Mark the checkpoint step done and the apply step running.
+6. Apply only the requested section amendments unless the packet clearly asks for broader cleanup.
+7. If a generator exists, edit the generator/source of truth and regenerate the HTML. Otherwise edit the HTML directly.
+8. Re-run `make` on the resulting HTML so the next review round keeps the comment UI.
+9. Mark `regenerate` and `verify` as done, then finish progress with:
+   ```bash
+   curl -s -X POST "http://127.0.0.1:8783/api/review-status?id=<reviewId>" \
+     -H 'content-type: application/json' \
+     --data '{"status":"completed","phase":"verify","percent":100,"message":"Applied and verified.","terminal":true,"step":{"key":"verify","status":"done"}}'
+   ```
+10. Report changed files and verification.
 
 ## Successful Test Task
 
@@ -60,4 +74,3 @@ Deterministic local verification:
 cd <REPO_ROOT>/plugins/html-review-packets
 npm run verify
 ```
-
