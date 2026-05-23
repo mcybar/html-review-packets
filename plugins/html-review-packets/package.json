@@ -1,0 +1,32 @@
+{
+  "name": "html-review-packets",
+  "version": "0.1.0",
+  "description": "Make generated HTML artifacts reviewable with inline comments and agent-readable review packets.",
+  "type": "module",
+  "bin": {
+    "html-review-packets": "./bin/html-review-packets.js",
+    "hrp": "./bin/html-review-packets.js"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:browser": "npx --yes playwright test tests/browser.spec.js",
+    "verify": "node scripts/verify-install.js && node scripts/test-task.js && npm test"
+  },
+  "keywords": [
+    "html",
+    "review",
+    "comments",
+    "agent",
+    "codex",
+    "openclaw",
+    "claude-code"
+  ],
+  "author": "Ming Wu",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "html-review-packets",
+  "version": "0.1.0",
+  "description": "Make generated HTML artifacts reviewable with inline comments and agent-readable review packets.",
+  "author": {
+    "name": "Ming Wu"
+  },
+  "repository": "https://github.com/mcybar/html-review-packets",
+  "homepage": "https://github.com/mcybar/html-review-packets",
+  "license": "MIT",
+  "keywords": [
+    "html",
+    "review",
+    "comments",
+    "agent"
+  ],
+  "skills": "./skills/"
+}
+

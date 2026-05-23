@@ -1,0 +1,29 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "html-review-packets",
+  "description": "Make generated HTML artifacts reviewable with inline comments and agent-readable review packets.",
+  "owner": {
+    "name": "Ming Wu"
+  },
+  "plugins": [
+    {
+      "name": "html-review-packets",
+      "description": "Inline review comments and review-packet capture for generated HTML artifacts.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Ming Wu"
+      },
+      "source": "./plugins/html-review-packets",
+      "category": "productivity",
+      "homepage": "https://github.com/mcybar/html-review-packets",
+      "tags": [
+        "html",
+        "review",
+        "comments",
+        "skills"
+      ]
+    }
+  ],
+  "version": "0.1.0"
+}
+

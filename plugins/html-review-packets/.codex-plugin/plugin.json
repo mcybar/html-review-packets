@@ -1,0 +1,36 @@
+{
+  "name": "html-review-packets",
+  "version": "0.1.0",
+  "description": "Make generated HTML artifacts reviewable with inline comments and agent-readable review packets.",
+  "author": {
+    "name": "Ming Wu"
+  },
+  "homepage": "https://github.com/mcybar/html-review-packets",
+  "repository": "https://github.com/mcybar/html-review-packets",
+  "license": "MIT",
+  "keywords": [
+    "html",
+    "review",
+    "comments",
+    "agent"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "HTML Review Packets",
+    "shortDescription": "Inline comments and agent review packets for HTML artifacts.",
+    "longDescription": "Adds a compact comment UI to generated HTML artifacts, captures review packets, and guides agents through versioned amendments.",
+    "developerName": "Ming Wu",
+    "category": "Productivity",
+    "capabilities": [
+      "Write",
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Make this HTML report reviewable.",
+      "Apply this HTML review packet.",
+      "Start the review packet bridge."
+    ],
+    "brandColor": "#2563EB"
+  }
+}
+
